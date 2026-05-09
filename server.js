@@ -16,9 +16,29 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
     cors: {
-        origin: "http://localhost:5173",
+        origin: "*",
         methods: ["GET", "POST"]
     }
+});
+
+io.on("connection", (socket) => {
+    console.log("User connected:", socket.id);
+
+    socket.on("join", (userId) => {
+        socket.join(userId);
+    })
+
+    socket.on("sendMesssage", (data) => {
+        io.to(data.receiver).emit("receiveMessage", data);
+    })
+
+    socket.on("disconnet", () => {
+        console.log("User disconnected");
+    });
+});
+
+server.listen(5001, () => {
+    console.log("Server running on port 5001");
 });
 
 app.use(cors());
