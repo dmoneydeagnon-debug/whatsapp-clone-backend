@@ -1,5 +1,4 @@
 const Message = require('./models/Message');
-const User = require('./models/User');
 
 let onlineUsers = new Map(); // userId -> socketId
 
@@ -11,7 +10,6 @@ module.exports = (io) => {
         socket.on('join', (userId) => {
             onlineUsers.set(userId.toString(), socket.id);
             socket.userId = userId.toString();
-            console.log(`User ${userId} joined`);
         });
 
         // Send Message
@@ -25,20 +23,20 @@ module.exports = (io) => {
                 });
 
                 await message.save();
-
                 const savedMessage = await message.populate('sender receiver');
 
-                console.log("ONLINE USERS MAP:", onlineUsers);
-                console.log("RECEIVER ID:", data.receiver);
+                const receiverSocket = onlineUsers.get(data.receiver);
 
-                // Send to receiver if online
-                io.emit('receiveMessage', savedMessage);
+                // Send to receiver only
+                if (receiverSocket) {
+                    io.to(receiverSocket).emit('receiveMessage', savedMessage);
+                }
 
                 // Send back to sender
                 socket.emit('receiveMessage', savedMessage);
 
             } catch (err) {
-                console.error("Message save error:", err);
+                console.error(err);
             }
         });
 

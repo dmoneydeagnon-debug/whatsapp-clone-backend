@@ -4,12 +4,12 @@ const Message = require('../models/Message');
 const auth = require('../middleware/auth');
 
 // Get messages between users
-router.get('/:userId', auth, async (requestAnimationFrame, res) => {
+router.get('/:userId', auth, async (req, res) => {
     try {
         const messages = await Message.find({
             $or: [
-                { sender: requestAnimationFrame.user.id, receiver: requestAnimationFrame.params.userId },
-                { sender: requestAnimationFrame.params.userId, receiver: requestAnimationFrame.user.id }
+                { sender: req.user.id, receiver: req.params.userId },
+                { sender: req.params.userId, receiver: req.user.id }
             ]
         }).sort({ createdAt: 1 });
 

@@ -14,6 +14,21 @@ dotenv.config();
 const app = express();
 const server = http.createServer(app);
 
+// CORS (important for Vercel frontend)
+app.use(cors({
+    origin: "*", // later you can restrict to your Vercel Url
+}));
+app.use(express.json());
+
+// Routes
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/messages', require('./routes/messages'));
+
+app.get('/', (req, res) => {
+    res.send('Backend Running');
+});
+
+// Socket
 const io = new Server(server, {
     cors: {
         origin: "*",
@@ -21,51 +36,16 @@ const io = new Server(server, {
     }
 });
 
-io.on("connection", (socket) => {
-    console.log("User connected:", socket.id);
+// Initialize socket logic
+require('./socket')(io);
 
-    socket.on("join", (userId) => {
-        socket.join(userId);
-    })
+const PORT = process.env.PORT || 5001
 
-    socket.on("sendMesssage", (data) => {
-        io.to(data.receiver).emit("receiveMessage", data);
-    })
-
-    socket.on("disconnet", () => {
-        console.log("User disconnected");
-    });
-});
-
-server.listen(5001, () => {
-    console.log("Server running on port 5001");
-});
-
-app.use(cors());
-app.use(express.json());
-
-//Routes
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/messages', require('./routes/messages'));
-
-//Basic route
-app.get('/', (req, res) => {
-    res.send('WhatsApp Clone Backend Running')
-});
-
-//Initialize Socket
-const initializeSocket = require('./socket');
-initializeSocket(io);
-
-const PORT = process.env.PORT || 5001;
-
-// Connect to MongoDB then start server
+// Start server AFTER DB connects
 connectDB().then(() => {
     server.listen(PORT, () => {
         console.log(`Server running on port ${PORT}`);
     });
 }).catch(err => {
-    console.error('Failed to connect to database', err);
+    console.error('DB error:', err);
 });
-
-module.exports = { io };
