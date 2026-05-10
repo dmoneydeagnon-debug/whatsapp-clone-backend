@@ -8,8 +8,8 @@ module.exports = (io) => {
 
         // User joins with their ID
         socket.on('join', (userId) => {
-            const receiverSocket = onlineUsers.get(data.receiver.toString());
             onlineUsers.set(userId.toString(), socket.id);
+            socket.userId = userId.toString();
 
             
             socket.userId = userId.toString();
@@ -33,7 +33,7 @@ module.exports = (io) => {
                 await message.save();
                 const savedMessage = await message.populate('sender receiver');
 
-                const receiverSocket = onlineUsers.get(data.receiver);
+                const receiverSocket = onlineUsers.get(data.receiver.toString());
 
                 // Send to receiver only
                 if (receiverSocket) {
