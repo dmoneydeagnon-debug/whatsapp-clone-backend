@@ -8,8 +8,9 @@ module.exports = (io) => {
 
         // User joins with their ID
         socket.on('join', (userId) => {
-            onlineUsers.set(userId.toString(), socket.id);
+            const receiverSocket = onlineUsers.get(data.receiver.toString());
             socket.userId = userId.toString();
+            console.log("JOINED:", userId);
         });
 
         // Send Message
