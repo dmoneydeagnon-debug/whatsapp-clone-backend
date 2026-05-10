@@ -164,4 +164,20 @@ router.get('/messages/:userId', auth, async (req, res) => {
     }
 });
 
+router.get('/me', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('name email phone');
+
+    res.json({
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone
+    });
+
+  } catch (err) {
+    res.status(500).json({ msg: 'Server error' });
+  }
+});
+
 module.exports = router;
