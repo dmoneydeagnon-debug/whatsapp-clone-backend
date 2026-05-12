@@ -1,46 +1,77 @@
+const jwt = require('jsonwebtoken');
 const Message = require('./models/Message');
 
-let onlineUsers = new Map(); // userId -> socketId
+let onlineUsers = new Map();
 
 module.exports = (io) => {
+
+    io.use((socket, next) => {
+        try {
+            const token = socket.handshake.auth.token;
+
+            if (!token) {
+                return next(new Error('Authentication error'));
+            }
+
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+            socket.user = decoded;
+
+            next();
+
+        } catch (err) {
+            next(new Error('Authentication error'));
+        }
+    });
+
     io.on('connection', (socket) => {
+
         console.log('User connected:', socket.id);
 
-        // User joins with their ID
         socket.on('join', (userId) => {
-            onlineUsers.set(userId.toString(), socket.id);
-            socket.userId = userId.toString();
 
-            
+            onlineUsers.set(userId.toString(), socket.id);
+
             socket.userId = userId.toString();
 
             console.log("JOINED:", userId);
-            console.log("ONLINE USERS:", onlineUsers);
-            console.log("SENDING TO:", data.receiver);
-            console.log("FOUND SOCKET", receiverSocket);
         });
 
-        // Send Message
+        const io = new Server(server, {
+            cors: {
+                origin: allowedOrigins,
+                methods: ["GET", "POST"]
+            }
+        });
+
         socket.on('sendMessage', async (data) => {
+
             try {
-                const message = new Message({
-                    sender: data.sender,
+
+                // Prevent empty messages
+                if (!data.text || !data.text.trim()) {
+                    return;
+                }
+
+    const message = new Message({
+                    sender: socket.user.id,
                     receiver: data.receiver,
                     text: data.text,
                     mediaType: data.mediaType || 'text'
                 });
 
                 await message.save();
-                const savedMessage = await message.populate('sender receiver');
 
-                const receiverSocket = onlineUsers.get(data.receiver.toString());
+                const savedMessage = await Message.findById(message._id);
 
-                // Send to receiver only
+                const receiverSocket =
+                    onlineUsers.get(data.receiver.toString());
+
                 if (receiverSocket) {
-                    io.to(receiverSocket).emit('receiveMessage', savedMessage);
+                    io.to(receiverSocket)
+                      .emit('receiveMessage', savedMessage);
                 }
 
-                // Send back to sender
                 socket.emit('receiveMessage', savedMessage);
 
             } catch (err) {
@@ -49,9 +80,12 @@ module.exports = (io) => {
         });
 
         socket.on('disconnect', () => {
+
             if (socket.userId) {
                 onlineUsers.delete(socket.userId);
             }
+
+            console.log('Disconnected:', socket.id);
         });
     });
 };

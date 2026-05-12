@@ -146,24 +146,6 @@ router.get('/users', auth, async (req, res) => {
   }
 });
 
-// Get messages between two users
-router.get('/messages/:userId', auth, async (req, res) => {
-    try {
-        const messages = await Message.find({
-            $or: [
-                { sender: req.user.id, receiver: req.params.userId },
-                { sender: req.params.userId, receiver: req.user.id }
-            ]
-        })
-        .sort({ createdAt: 1 })
-
-        res.json(messages);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ msg: 'Server error' });
-    }
-});
-
 router.get('/me', auth, async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select('name email phone');

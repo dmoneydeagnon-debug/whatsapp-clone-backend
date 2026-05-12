@@ -7,7 +7,7 @@ const userSchema = new mongoose.Schema({
     password: { type: String},
     avatar: { type: String, default: '' },
     lastSeen: { type: Date, default: Date.now },
-    isOnline: { type: Boolean, defaults: false }
+    isOnline: { type: Boolean, default: false }
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', userSchema);

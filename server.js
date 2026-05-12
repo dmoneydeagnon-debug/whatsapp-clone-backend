@@ -15,8 +15,14 @@ const app = express();
 const server = http.createServer(app);
 
 // CORS (important for Vercel frontend)
+const allowedOrigins = [
+    "http://localhost:5173",
+    "https://whatsapp-clone-frontend-one.vercel.app"
+];
+
 app.use(cors({
-    origin: "*", // later you can restrict to your Vercel Url
+    origin: allowedOrigins,
+    credentials: true
 }));
 app.use(express.json());
 
