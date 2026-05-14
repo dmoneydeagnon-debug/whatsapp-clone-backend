@@ -38,8 +38,13 @@ app.get('/', (req, res) => {
 const io = new Server(server, {
     cors: {
         origin: allowedOrigins,
-        methods: ["GET", "POST"]
-    }
+        methods: ["GET", "POST"],
+        credentials: true
+    },
+
+    transports: ['websocket', 'polling'],
+
+    allowEIO3: true
 });
 
 // Initialize socket logic
