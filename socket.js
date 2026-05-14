@@ -13,7 +13,10 @@ module.exports = (io) => {
                 return next(new Error('Authentication error'));
             }
 
-            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const decoded = jwt.verify(
+                token,
+                process.env.JWT_SECRET
+            );
 
             socket.user = decoded;
 
@@ -37,26 +40,18 @@ module.exports = (io) => {
             console.log("JOINED:", userId);
         });
 
-        const io = new Server(server, {
-            cors: {
-                origin: allowedOrigins,
-                methods: ["GET", "POST"]
-            }
-        });
-
         socket.on('sendMessage', async (data) => {
 
             try {
 
-                // Prevent empty messages
                 if (!data.text || !data.text.trim()) {
                     return;
                 }
 
-    const message = new Message({
+                const message = new Message({
                     sender: socket.user.id,
                     receiver: data.receiver,
-                    text: data.text,
+                    text: data.text.trim(),
                     mediaType: data.mediaType || 'text'
                 });
 
@@ -67,11 +62,13 @@ module.exports = (io) => {
                 const receiverSocket =
                     onlineUsers.get(data.receiver.toString());
 
+                // Send to receiver
                 if (receiverSocket) {
                     io.to(receiverSocket)
                       .emit('receiveMessage', savedMessage);
                 }
 
+                // Send back to sender
                 socket.emit('receiveMessage', savedMessage);
 
             } catch (err) {

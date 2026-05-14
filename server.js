@@ -37,7 +37,7 @@ app.get('/', (req, res) => {
 // Socket
 const io = new Server(server, {
     cors: {
-        origin: "*",
+        origin: allowedOrigins,
         methods: ["GET", "POST"]
     }
 });
