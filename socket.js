@@ -2,10 +2,12 @@ const jwt = require('jsonwebtoken');
 const Message = require('./models/Message');
 const User = require('./models/User');
 
+// userId -> Set(socketId)
 let onlineUsers = new Map();
 
 module.exports = (io) => {
 
+    // AUTH MIDDLEWARE
     io.use((socket, next) => {
         try {
             const token = socket.handshake.auth.token;
@@ -14,10 +16,7 @@ module.exports = (io) => {
                 return next(new Error('Authentication error'));
             }
 
-            const decoded = jwt.verify(
-                token,
-                process.env.JWT_SECRET
-            );
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
             socket.user = decoded;
 
@@ -28,89 +27,102 @@ module.exports = (io) => {
         }
     });
 
-    io.on('connection', (socket) => {
+    io.on('connection', async (socket) => {
 
-        console.log('User connected:', socket.id);
+        const userId = socket.user.id;
+        socket.userId = userId;
 
-        socket.on('join', async (userId) => {
+        console.log('User connected:', socket.id, 'User:', userId);
 
-    onlineUsers.set(userId.toString(), socket.id);
+        // =========================
+        // HANDLE ONLINE USERS MAP
+        // =========================
+        if (!onlineUsers.has(userId)) {
+            onlineUsers.set(userId, new Set());
+        }
 
-    socket.userId = userId.toString();
+        onlineUsers.get(userId).add(socket.id);
 
-    // Update DB
-    await User.findByIdAndUpdate(userId, {
-        isOnline: true
-    });
+        // Update DB
+        await User.findByIdAndUpdate(userId, {
+            isOnline: true
+        });
 
-    // Notify everyone
-    io.emit('userStatusChanged', {
-        userId,
-        isOnline: true
-    });
+        // Broadcast online
+        io.emit('userStatusChanged', {
+            userId,
+            isOnline: true
+        });
 
-    console.log("JOINED:", userId);
-});
-
+        // =========================
+        // SEND MESSAGE
+        // =========================
         socket.on('sendMessage', async (data) => {
-
             try {
+                if (!data.text?.trim()) return;
 
-                if (!data.text || !data.text.trim()) {
-                    return;
-                }
-
-                const message = new Message({
-                    sender: socket.user.id,
+                const message = await Message.create({
+                    sender: userId,
                     receiver: data.receiver,
                     text: data.text.trim(),
                     mediaType: data.mediaType || 'text'
                 });
 
-                await message.save();
+                const cleanMessage = {
+                    _id: message._id,
+                    sender: userId,
+                    receiver: data.receiver,
+                    text: message.text,
+                    mediaType: message.mediaType,
+                    createdAt: message.createdAt
+                };
 
-                const savedMessage = await Message.findById(message._id);
+                // Send to receiver (all their devices)
+                const receiverSockets = onlineUsers.get(data.receiver);
 
-                const receiverSocket =
-                    onlineUsers.get(data.receiver.toString());
-
-                // Send to receiver
-                if (receiverSocket) {
-                    io.to(receiverSocket)
-                      .emit('receiveMessage', savedMessage);
+                if (receiverSockets) {
+                    for (const socketId of receiverSockets) {
+                        io.to(socketId).emit('receiveMessage', cleanMessage);
+                    }
                 }
 
                 // Send back to sender
-                socket.emit('receiveMessage', savedMessage);
+                socket.emit('receiveMessage', cleanMessage);
 
             } catch (err) {
-                console.error(err);
+                console.error('SEND MESSAGE ERROR:', err);
             }
         });
 
+        // =========================
+        // DISCONNECT
+        // =========================
         socket.on('disconnect', async () => {
 
-    if (socket.userId) {
+            const sockets = onlineUsers.get(userId);
 
-        onlineUsers.delete(socket.userId);
+            if (sockets) {
+                sockets.delete(socket.id);
 
-        const lastSeen = new Date();
+                if (sockets.size === 0) {
+                    onlineUsers.delete(userId);
 
-        // Update DB
-        await User.findByIdAndUpdate(socket.userId, {
-            isOnline: false,
-            lastSeen
+                    const lastSeen = new Date();
+
+                    await User.findByIdAndUpdate(userId, {
+                        isOnline: false,
+                        lastSeen
+                    });
+
+                    io.emit('userStatusChanged', {
+                        userId,
+                        isOnline: false,
+                        lastSeen
+                    });
+                }
+            }
+
+            console.log('Disconnected:', socket.id);
         });
-
-        // Notify everyone
-        io.emit('userStatusChanged', {
-            userId: socket.userId,
-            isOnline: false,
-            lastSeen
-        });
-    }
-
-    console.log('Disconnected:', socket.id);
-});
     });
 };
