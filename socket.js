@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const Message = require('./models/Message');
+const User = require('./models/User');
 
 let onlineUsers = new Map();
 
@@ -31,14 +32,25 @@ module.exports = (io) => {
 
         console.log('User connected:', socket.id);
 
-        socket.on('join', (userId) => {
+        socket.on('join', async (userId) => {
 
-            onlineUsers.set(userId.toString(), socket.id);
+    onlineUsers.set(userId.toString(), socket.id);
 
-            socket.userId = userId.toString();
+    socket.userId = userId.toString();
 
-            console.log("JOINED:", userId);
-        });
+    // Update DB
+    await User.findByIdAndUpdate(userId, {
+        isOnline: true
+    });
+
+    // Notify everyone
+    io.emit('userStatusChanged', {
+        userId,
+        isOnline: true
+    });
+
+    console.log("JOINED:", userId);
+});
 
         socket.on('sendMessage', async (data) => {
 
@@ -76,13 +88,29 @@ module.exports = (io) => {
             }
         });
 
-        socket.on('disconnect', () => {
+        socket.on('disconnect', async () => {
 
-            if (socket.userId) {
-                onlineUsers.delete(socket.userId);
-            }
+    if (socket.userId) {
 
-            console.log('Disconnected:', socket.id);
+        onlineUsers.delete(socket.userId);
+
+        const lastSeen = new Date();
+
+        // Update DB
+        await User.findByIdAndUpdate(socket.userId, {
+            isOnline: false,
+            lastSeen
         });
+
+        // Notify everyone
+        io.emit('userStatusChanged', {
+            userId: socket.userId,
+            isOnline: false,
+            lastSeen
+        });
+    }
+
+    console.log('Disconnected:', socket.id);
+});
     });
 };
