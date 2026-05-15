@@ -7,7 +7,9 @@ let onlineUsers = new Map();
 
 module.exports = (io) => {
 
+    // =========================
     // AUTH MIDDLEWARE
+    // =========================
     io.use((socket, next) => {
         try {
             const token = socket.handshake.auth.token;
@@ -17,7 +19,6 @@ module.exports = (io) => {
             }
 
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
             socket.user = decoded;
 
             next();
@@ -27,6 +28,9 @@ module.exports = (io) => {
         }
     });
 
+    // =========================
+    // CONNECTION
+    // =========================
     io.on('connection', async (socket) => {
 
         const userId = socket.user.id;
@@ -35,7 +39,7 @@ module.exports = (io) => {
         console.log('User connected:', socket.id, 'User:', userId);
 
         // =========================
-        // HANDLE ONLINE USERS MAP
+        // ONLINE USERS MAP (multi-device safe)
         // =========================
         if (!onlineUsers.has(userId)) {
             onlineUsers.set(userId, new Set());
@@ -43,28 +47,34 @@ module.exports = (io) => {
 
         onlineUsers.get(userId).add(socket.id);
 
-        // Update DB
+        // mark online in DB
         await User.findByIdAndUpdate(userId, {
             isOnline: true
         });
 
-        // Broadcast online
+        // broadcast online status
         io.emit('userStatusChanged', {
             userId,
             isOnline: true
         });
 
         // =========================
-        // SEND MESSAGE
+        // SEND MESSAGE (TEXT + IMAGE + VOICE)
         // =========================
         socket.on('sendMessage', async (data) => {
             try {
-                if (!data.text?.trim()) return;
+
+                const hasText = data.text && data.text.trim();
+                const hasMedia = data.mediaUrl && data.mediaUrl.trim();
+
+                // block only if completely empty
+                if (!hasText && !hasMedia) return;
 
                 const message = await Message.create({
                     sender: userId,
                     receiver: data.receiver,
-                    text: data.text.trim(),
+                    text: data.text?.trim() || '',
+                    mediaUrl: data.mediaUrl || '',
                     mediaType: data.mediaType || 'text'
                 });
 
@@ -73,20 +83,21 @@ module.exports = (io) => {
                     sender: userId,
                     receiver: data.receiver,
                     text: message.text,
+                    mediaUrl: message.mediaUrl,
                     mediaType: message.mediaType,
                     createdAt: message.createdAt
                 };
 
-                // Send to receiver (all their devices)
+                // send to receiver (all devices)
                 const receiverSockets = onlineUsers.get(data.receiver);
 
-                if (receiverSockets) {
+                if (receiverSockets && receiverSockets.size > 0) {
                     for (const socketId of receiverSockets) {
                         io.to(socketId).emit('receiveMessage', cleanMessage);
                     }
                 }
 
-                // Send back to sender
+                // send back to sender
                 socket.emit('receiveMessage', cleanMessage);
 
             } catch (err) {
