@@ -108,6 +108,7 @@ router.post('/google', async (req, res) => {
       user = new User({
         name: payload.name,
         email: payload.email,
+        avatar: payload.picture,
         password: null,
       });
       await user.save();
@@ -123,8 +124,11 @@ router.post('/google', async (req, res) => {
       token: jwtToken,
       user: {
         id: user._id,
-        name:user.name,
-        email: user.email
+        name: user.name,
+        email: user.email,
+        avatar: user.avatar,
+        isOnline: user.isOnline,
+        lastSeen: user.lastSeen
       }
     });
 
@@ -138,7 +142,7 @@ router.post('/google', async (req, res) => {
 router.get('/users', auth, async (req, res) => {
   try {
     const users = await User.find({ _id: { $ne: req.user.id } })
-      .select('name email isOnline lastSeen');
+      .select('name email avatar isOnline lastSeen');
     res.json(users);
   } catch (err) {
     console.error(err);
@@ -148,13 +152,16 @@ router.get('/users', auth, async (req, res) => {
 
 router.get('/me', auth, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('name email phone');
+    const user = await User.findById(req.user.id).select('name email phone avatar isOnline lastSeen');
 
     res.json({
       id: user._id,
       name: user.name,
       email: user.email,
-      phone: user.phone
+      phone: user.phone,
+      avatar: user.avatar,
+      isOnline: user.isOnline,
+      lastSeen: user.lastSeen
     });
 
   } catch (err) {
