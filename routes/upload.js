@@ -30,6 +30,11 @@ const uploadToCloudinary = (fileBuffer, folder) => {
 // IMAGE UPLOAD
 router.post('/image', upload.single('file'), async (req, res) => {
   try {
+    if (!req.file) {
+      console.error('Image upload error: missing file');
+      return res.status(400).json({ msg: 'No file provided' });
+    }
+
     const result = await uploadToCloudinary(req.file.buffer, 'chat-images');
 
     res.json({
@@ -37,13 +42,19 @@ router.post('/image', upload.single('file'), async (req, res) => {
       type: 'image'
     });
   } catch (err) {
-    res.status(500).json({ msg: 'Image upload failed' });
+    console.error('Image upload error:', err);
+    res.status(500).json({ msg: err.message || 'Image upload failed' });
   }
 });
 
 // AUDIO/VOICE UPLOAD
 router.post('/voice', upload.single('file'), async (req, res) => {
   try {
+    if (!req.file) {
+      console.error('Voice upload error: missing file');
+      return res.status(400).json({ msg: 'No file provided' });
+    }
+
     const result = await uploadToCloudinary(req.file.buffer, 'chat-voices');
 
     res.json({
@@ -51,14 +62,18 @@ router.post('/voice', upload.single('file'), async (req, res) => {
       type: 'voice'
     });
   } catch (err) {
-    res.status(500).json({ msg: 'Voice upload failed' });
+    console.error('Voice upload error:', err);
+    res.status(500).json({ msg: err.message || 'Voice upload failed' });
   }
 });
 
 // GENERIC UPLOAD: accept form field `file` and route based on mimetype
 router.post('/', upload.single('file'), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ msg: 'No file provided' });
+    if (!req.file) {
+      console.error('Generic upload error: missing file');
+      return res.status(400).json({ msg: 'No file provided' });
+    }
 
     const mimetype = req.file.mimetype || '';
     const isImage = mimetype.startsWith('image/');
@@ -73,8 +88,8 @@ router.post('/', upload.single('file'), async (req, res) => {
       type: isImage ? 'image' : isAudio ? 'voice' : 'file'
     });
   } catch (err) {
-    console.error('Upload error:', err);
-    res.status(500).json({ msg: 'Upload failed' });
+    console.error('Generic upload error:', err);
+    res.status(500).json({ msg: err.message || 'Upload failed' });
   }
 });
 
