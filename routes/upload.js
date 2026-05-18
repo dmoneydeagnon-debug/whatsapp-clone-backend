@@ -4,13 +4,21 @@ const upload = require('../middleware/upload');
 const cloudinary = require('cloudinary').v2;
 const streamifier = require('streamifier');
 
-// Cloudinary config
-// Support two env var naming conventions: CLOUDINARY_NAME or CLOUDINARY_CLOUD_NAME
-cloudinary.config({
+const cloudinaryConfig = {
   cloud_name: process.env.CLOUDINARY_NAME || process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET
-});
+};
+
+if (!cloudinaryConfig.cloud_name || !cloudinaryConfig.api_key || !cloudinaryConfig.api_secret) {
+  console.error('Cloudinary env not fully configured:', {
+    cloud_name: !!cloudinaryConfig.cloud_name,
+    api_key: !!cloudinaryConfig.api_key,
+    api_secret: !!cloudinaryConfig.api_secret
+  });
+}
+
+cloudinary.config(cloudinaryConfig);
 
 // helper to upload buffer to cloudinary
 const uploadToCloudinary = (fileBuffer, folder) => {
@@ -43,7 +51,7 @@ router.post('/image', upload.single('file'), async (req, res) => {
     });
   } catch (err) {
     console.error('Image upload error:', err);
-    res.status(500).json({ msg: err.message || 'Image upload failed' });
+    res.status(500).json({ msg: err.message || 'Image upload failed', error: err.stack || err });
   }
 });
 
@@ -63,7 +71,7 @@ router.post('/voice', upload.single('file'), async (req, res) => {
     });
   } catch (err) {
     console.error('Voice upload error:', err);
-    res.status(500).json({ msg: err.message || 'Voice upload failed' });
+    res.status(500).json({ msg: err.message || 'Voice upload failed', error: err.stack || err });
   }
 });
 
@@ -89,7 +97,7 @@ router.post('/', upload.single('file'), async (req, res) => {
     });
   } catch (err) {
     console.error('Generic upload error:', err);
-    res.status(500).json({ msg: err.message || 'Upload failed' });
+    res.status(500).json({ msg: err.message || 'Upload failed', error: err.stack || err });
   }
 });
 
