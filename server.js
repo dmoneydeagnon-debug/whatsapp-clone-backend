@@ -35,6 +35,20 @@ app.get('/', (req, res) => {
     res.send('Backend Running');
 });
 
+app.use((err, req, res, next) => {
+    console.error('Express error:', err);
+
+    if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ msg: 'File too large. Max 10MB.' });
+    }
+
+    if (err.message?.includes('Invalid file type')) {
+        return res.status(400).json({ msg: err.message });
+    }
+
+    res.status(500).json({ msg: err.message || 'Server error' });
+});
+
 // Socket
 const io = new Server(server, {
     cors: {
