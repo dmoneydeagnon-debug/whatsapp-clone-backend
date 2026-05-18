@@ -54,4 +54,27 @@ router.post('/voice', upload.single('file'), async (req, res) => {
   }
 });
 
+// GENERIC UPLOAD: accept form field `file` and route based on mimetype
+router.post('/', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ msg: 'No file provided' });
+
+    const mimetype = req.file.mimetype || '';
+    const isImage = mimetype.startsWith('image/');
+    const isAudio = mimetype.startsWith('audio/');
+
+    const folder = isImage ? 'chat-images' : isAudio ? 'chat-voices' : 'chat-files';
+
+    const result = await uploadToCloudinary(req.file.buffer, folder);
+
+    res.json({
+      url: result.secure_url,
+      type: isImage ? 'image' : isAudio ? 'voice' : 'file'
+    });
+  } catch (err) {
+    console.error('Upload error:', err);
+    res.status(500).json({ msg: 'Upload failed' });
+  }
+});
+
 module.exports = router;
