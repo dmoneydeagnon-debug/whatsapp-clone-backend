@@ -17,7 +17,7 @@ const server = http.createServer(app);
 // CORS (important for Vercel frontend)
 const allowedOrigins = [
     "http://localhost:5173",
-    "https://funchat.vercel.app"
+    "https://whatsapp-clone-frontend-one.vercel.app"
 ];
 
 app.use(cors({
