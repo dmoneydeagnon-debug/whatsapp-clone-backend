@@ -65,8 +65,16 @@ router.post('/voice', upload.single('file'), async (req, res) => {
 
     const result = await uploadToCloudinary(req.file.buffer, 'chat-voices');
 
+    const playableUrl = result.public_id
+      ? cloudinary.url(result.public_id, {
+          resource_type: 'auto',
+          format: 'mp3',
+          secure: true
+        })
+      : result.secure_url;
+
     res.json({
-      url: result.secure_url,
+      url: playableUrl,
       type: 'voice'
     });
   } catch (err) {
@@ -91,8 +99,16 @@ router.post('/', upload.single('file'), async (req, res) => {
 
     const result = await uploadToCloudinary(req.file.buffer, folder);
 
+    const url = isAudio && result.public_id
+      ? cloudinary.url(result.public_id, {
+          resource_type: 'auto',
+          format: 'mp3',
+          secure: true
+        })
+      : result.secure_url;
+
     res.json({
-      url: result.secure_url,
+      url,
       type: isImage ? 'image' : isAudio ? 'voice' : 'file'
     });
   } catch (err) {
