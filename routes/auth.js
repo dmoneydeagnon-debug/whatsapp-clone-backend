@@ -143,7 +143,28 @@ router.get('/users', auth, async (req, res) => {
   try {
     const users = await User.find({ _id: { $ne: req.user.id } })
       .select('name email avatar isOnline lastSeen');
-    res.json(users);
+
+    const usersWithLastMessage = await Promise.all(
+      users.map(async (user) => {
+        const lastMessage = await Message.findOne({
+          $or: [
+            { sender: req.user.id, receiver: user._id },
+            { sender: user._id, receiver: req.user.id }
+          ]
+        })
+          .sort({ createdAt: -1 })
+          .lean();
+
+        return {
+          ...user.toObject(),
+          lastMessage: lastMessage
+            ? lastMessage.text || `[${lastMessage.mediaType}]`
+            : ''
+        };
+      })
+    );
+
+    res.json(usersWithLastMessage);
   } catch (err) {
     console.error(err);
     res.status(500).json({ msg: 'Server error' });
