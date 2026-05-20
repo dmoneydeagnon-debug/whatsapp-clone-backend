@@ -146,20 +146,28 @@ router.get('/users', auth, async (req, res) => {
 
     const usersWithLastMessage = await Promise.all(
       users.map(async (user) => {
-        const lastMessage = await Message.findOne({
-          $or: [
-            { sender: req.user.id, receiver: user._id },
-            { sender: user._id, receiver: req.user.id }
-          ]
-        })
-          .sort({ createdAt: -1 })
-          .lean();
+        const [lastMessage, unreadCount] = await Promise.all([
+          Message.findOne({
+            $or: [
+              { sender: req.user.id, receiver: user._id },
+              { sender: user._id, receiver: req.user.id }
+            ]
+          })
+            .sort({ createdAt: -1 })
+            .lean(),
+          Message.countDocuments({
+            sender: user._id,
+            receiver: req.user.id,
+            read: false
+          })
+        ]);
 
         return {
           ...user.toObject(),
           lastMessage: lastMessage
             ? lastMessage.text || `[${lastMessage.mediaType}]`
-            : ''
+            : '',
+          unreadCount
         };
       })
     );

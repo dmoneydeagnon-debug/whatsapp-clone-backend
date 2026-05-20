@@ -58,6 +58,27 @@ module.exports = (io) => {
             isOnline: true
         });
 
+        // update pending messages that were sent while offline
+        const pendingMessages = await Message.find({
+            receiver: userId,
+            status: 'sent'
+        });
+
+        for (const pending of pendingMessages) {
+            pending.status = 'delivered';
+            await pending.save();
+
+            const senderSockets = onlineUsers.get(pending.sender.toString());
+            if (senderSockets && senderSockets.size > 0) {
+                for (const socketId of senderSockets) {
+                    io.to(socketId).emit('messageStatusUpdate', {
+                        messageId: pending._id,
+                        status: 'delivered'
+                    });
+                }
+            }
+        }
+
         // =========================
         // SEND MESSAGE (TEXT + IMAGE + VOICE)
         // =========================
@@ -70,12 +91,17 @@ module.exports = (io) => {
                 // block only if completely empty
                 if (!hasText && !hasMedia) return;
 
+                const receiverSockets = onlineUsers.get(data.receiver);
+                const isReceiverOnline = receiverSockets && receiverSockets.size > 0;
+                const messageStatus = isReceiverOnline ? 'delivered' : 'sent';
+
                 const message = await Message.create({
                     sender: userId,
                     receiver: data.receiver,
                     text: data.text?.trim() || '',
                     mediaUrl: data.mediaUrl || '',
-                    mediaType: data.mediaType || 'text'
+                    mediaType: data.mediaType || 'text',
+                    status: messageStatus
                 });
 
                 const cleanMessage = {
@@ -85,13 +111,12 @@ module.exports = (io) => {
                     text: message.text,
                     mediaUrl: message.mediaUrl,
                     mediaType: message.mediaType,
-                    createdAt: message.createdAt
+                    createdAt: message.createdAt,
+                    status: message.status
                 };
 
                 // send to receiver (all devices)
-                const receiverSockets = onlineUsers.get(data.receiver);
-
-                if (receiverSockets && receiverSockets.size > 0) {
+                if (isReceiverOnline) {
                     for (const socketId of receiverSockets) {
                         io.to(socketId).emit('receiveMessage', cleanMessage);
                     }
@@ -100,8 +125,51 @@ module.exports = (io) => {
                 // send back to sender
                 socket.emit('receiveMessage', cleanMessage);
 
+                if (isReceiverOnline) {
+                    const senderSockets = onlineUsers.get(userId);
+                    if (senderSockets) {
+                        for (const socketId of senderSockets) {
+                            io.to(socketId).emit('messageStatusUpdate', {
+                                messageId: message._id,
+                                status: 'delivered'
+                            });
+                        }
+                    }
+                }
+
             } catch (err) {
                 console.error('SEND MESSAGE ERROR:', err);
+            }
+        });
+
+        socket.on('markAsRead', async ({ chatId }) => {
+            try {
+                const unreadMessages = await Message.find({
+                    sender: chatId,
+                    receiver: userId,
+                    read: false
+                });
+
+                if (unreadMessages.length === 0) return;
+
+                const messageIds = unreadMessages.map((m) => m._id);
+
+                await Message.updateMany(
+                    { _id: { $in: messageIds } },
+                    { $set: { read: true, status: 'read' } }
+                );
+
+                const senderSockets = onlineUsers.get(chatId);
+                if (senderSockets && senderSockets.size > 0) {
+                    for (const socketId of senderSockets) {
+                        io.to(socketId).emit('messageStatusUpdate', {
+                            messageIds,
+                            status: 'read'
+                        });
+                    }
+                }
+            } catch (err) {
+                console.error('MARK AS READ ERROR:', err);
             }
         });
 
