@@ -84,7 +84,6 @@ module.exports = (io) => {
         // =========================
         socket.on('sendMessage', async (data) => {
             try {
-
                 const hasText = data.text && data.text.trim();
                 const hasMedia = data.mediaUrl && data.mediaUrl.trim();
 
@@ -125,6 +124,7 @@ module.exports = (io) => {
                 // send back to sender
                 socket.emit('receiveMessage', cleanMessage);
 
+                // update sender devices as delivered when receiver is online
                 if (isReceiverOnline) {
                     const senderSockets = onlineUsers.get(userId);
                     if (senderSockets) {
@@ -142,6 +142,9 @@ module.exports = (io) => {
             }
         });
 
+        // =========================
+        // MARK AS READ
+        // =========================
         socket.on('markAsRead', async ({ chatId }) => {
             try {
                 const unreadMessages = await Message.find({
@@ -170,6 +173,67 @@ module.exports = (io) => {
                 }
             } catch (err) {
                 console.error('MARK AS READ ERROR:', err);
+            }
+        });
+
+        // =========================
+        // ADD REACTION
+        // =========================
+        socket.on('addReaction', async ({ messageId, receiver, emoji }) => {
+            try {
+                if (!messageId || !receiver || !emoji) return;
+
+                const message = await Message.findById(messageId);
+                if (!message) return;
+
+                // Ensure the reaction sender is part of this conversation
+                const isParticipant =
+                    message.sender?.toString?.() === userId?.toString?.() ||
+                    message.receiver?.toString?.() === userId?.toString?.();
+                if (!isParticipant) return;
+
+                const userIdStr = userId.toString();
+
+                // Replace existing reaction from this user for same emoji
+                // (We allow only one reaction per user per message per this schema pattern.)
+                const current = message.reactions || [];
+
+                const hasAnyReactionFromUser = current.some((r) => r.userId?.toString?.() === userIdStr);
+                const updatedReactions = [];
+
+                for (const r of current) {
+                    if (r.userId?.toString?.() === userIdStr) continue; // remove previous reaction(s) by this user
+                    updatedReactions.push(r);
+                }
+
+                if (!hasAnyReactionFromUser || !current.some((r) => r.userId?.toString?.() === userIdStr && r.emoji === emoji)) {
+                    updatedReactions.push({ emoji, userId });
+                }
+
+                message.reactions = updatedReactions;
+                await message.save();
+
+                const payload = {
+                    messageId,
+                    reactions: message.reactions || []
+                };
+
+                // Emit updated reactions to both sender and receiver devices
+                const senderSockets = onlineUsers.get(message.sender.toString());
+                if (senderSockets) {
+                    for (const socketId of senderSockets) {
+                        io.to(socketId).emit('messageReaction', payload);
+                    }
+                }
+
+                const receiverSockets = onlineUsers.get(receiver.toString());
+                if (receiverSockets) {
+                    for (const socketId of receiverSockets) {
+                        io.to(socketId).emit('messageReaction', payload);
+                    }
+                }
+            } catch (err) {
+                console.error('ADD REACTION ERROR:', err);
             }
         });
 
@@ -205,3 +269,4 @@ module.exports = (io) => {
         });
     });
 };
+

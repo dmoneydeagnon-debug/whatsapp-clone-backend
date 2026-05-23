@@ -39,8 +39,17 @@ const messageSchema = new mongoose.Schema({
     read: {
         type: Boolean,
         default: false
-    }
+    },
+
+    // Reactions (emoji per message, by user)
+    reactions: [
+        {
+            emoji: { type: String, required: true },
+            userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }
+        }
+    ]
 
 }, { timestamps: true });
+
 
 module.exports = mongoose.model('Message', messageSchema);
