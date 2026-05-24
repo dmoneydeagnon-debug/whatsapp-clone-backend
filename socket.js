@@ -58,10 +58,11 @@ module.exports = (io) => {
             isOnline: true
         });
 
-        // update pending messages that were sent while offline
+        // update pending 1:1 messages that were sent while offline
         const pendingMessages = await Message.find({
             receiver: userId,
-            status: 'sent'
+            status: 'sent',
+            groupId: { $exists: false }
         });
 
         for (const pending of pendingMessages) {
@@ -79,8 +80,9 @@ module.exports = (io) => {
             }
         }
 
+
         // =========================
-        // SEND MESSAGE (TEXT + IMAGE + VOICE)
+        // SEND MESSAGE (TEXT + IMAGE + VOICE) [1:1 + GROUP]
         // =========================
         socket.on('sendMessage', async (data) => {
             try {
@@ -90,6 +92,57 @@ module.exports = (io) => {
                 // block only if completely empty
                 if (!hasText && !hasMedia) return;
 
+                // -------------------------
+                // GROUP MESSAGE
+                // -------------------------
+                if (data.groupId) {
+                    const Group = require('./models/Group');
+                    const group = await Group.findById(data.groupId).lean();
+                    if (!group) return;
+
+                    const isMember = (group.members || []).some((m) => m.toString() === userId.toString());
+                    if (!isMember) return;
+
+                    const message = await Message.create({
+                        sender: userId,
+                        groupId: data.groupId,
+                        text: data.text?.trim() || '',
+                        mediaUrl: data.mediaUrl || '',
+                        mediaType: data.mediaType || 'text',
+                        status: 'sent'
+                    });
+
+                    const cleanMessage = {
+                        _id: message._id,
+                        sender: userId,
+                        groupId: data.groupId,
+                        text: message.text,
+                        mediaUrl: message.mediaUrl,
+                        mediaType: message.mediaType,
+                        createdAt: message.createdAt,
+                        status: message.status
+                    };
+
+                    // broadcast to all online members
+                    const memberIds = (group.members || []).map((id) => id.toString());
+                    const onlineMemberIds = memberIds.filter((id) => onlineUsers.get(id) && onlineUsers.get(id).size > 0);
+
+                    for (const memberId of onlineMemberIds) {
+                        const memberSockets = onlineUsers.get(memberId);
+                        if (!memberSockets) continue;
+                        for (const socketId of memberSockets) {
+                            io.to(socketId).emit('receiveMessage', cleanMessage);
+                        }
+                    }
+
+                    // sender should already receive via broadcast, but keep consistent
+                    socket.emit('receiveMessage', cleanMessage);
+                    return;
+                }
+
+                // -------------------------
+                // 1:1 MESSAGE
+                // -------------------------
                 const receiverSockets = onlineUsers.get(data.receiver);
                 const isReceiverOnline = receiverSockets && receiverSockets.size > 0;
                 const messageStatus = isReceiverOnline ? 'delivered' : 'sent';
@@ -145,8 +198,48 @@ module.exports = (io) => {
         // =========================
         // MARK AS READ
         // =========================
-        socket.on('markAsRead', async ({ chatId }) => {
+        socket.on('markAsRead', async ({ chatId, groupId }) => {
             try {
+                // -------------------------
+                // GROUP mark-as-read
+                // -------------------------
+                if (groupId) {
+                    // When a member opens the group, mark all unread group messages as read
+                    const unreadMessages = await Message.find({
+                        groupId,
+                        read: false
+                    });
+
+                    if (unreadMessages.length === 0) return;
+
+                    const messageIds = unreadMessages.map((m) => m._id);
+                    await Message.updateMany(
+                        { _id: { $in: messageIds } },
+                        { $set: { read: true, status: 'read' } }
+                    );
+
+                    // notify all online group members except sender is not known here, just broadcast
+                    const Group = require('./models/Group');
+                    const group = await Group.findById(groupId).lean();
+                    if (!group) return;
+
+                    for (const memberId of (group.members || []).map((id) => id.toString())) {
+                        const memberSockets = onlineUsers.get(memberId);
+                        if (!memberSockets) continue;
+                        for (const socketId of memberSockets) {
+                            io.to(socketId).emit('messageStatusUpdate', {
+                                messageIds,
+                                status: 'read'
+                            });
+                        }
+                    }
+
+                    return;
+                }
+
+                // -------------------------
+                // 1:1 mark-as-read
+                // -------------------------
                 const unreadMessages = await Message.find({
                     sender: chatId,
                     receiver: userId,
@@ -175,6 +268,7 @@ module.exports = (io) => {
                 console.error('MARK AS READ ERROR:', err);
             }
         });
+
 
         // =========================
         // ADD REACTION

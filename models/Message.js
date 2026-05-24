@@ -9,8 +9,17 @@ const messageSchema = new mongoose.Schema({
     receiver: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
-        required: true
+        // receiver is required for 1:1 chats; for groups we use groupId
+        required: false
     },
+
+    groupId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Group',
+        // groupId is required for group chats
+        required: false
+    },
+
 
     // FIXED ✅
     text: {
