@@ -271,6 +271,63 @@ module.exports = (io) => {
 
 
         // =========================
+        // DELETE MESSAGE (soft delete)
+        // =========================
+        socket.on('deleteMessage', async ({ messageId, scope }) => {
+            try {
+                if (!messageId || !scope) return;
+
+                const message = await Message.findById(messageId);
+                if (!message) return;
+
+                const isParticipant =
+                    message.sender?.toString?.() === userId?.toString?.() ||
+                    message.receiver?.toString?.() === userId?.toString?.();
+                if (!isParticipant) return;
+
+                const scopeSafe = scope === 'everyone' ? 'everyone' : 'me';
+
+                if (scopeSafe === 'me') {
+                    message.deletedForMe = Array.isArray(message.deletedForMe) ? message.deletedForMe : [];
+                    const already = message.deletedForMe.some((id) => id?.toString?.() === userId.toString());
+                    if (!already) message.deletedForMe.push(userId);
+                    message.deletedAt = message.deletedAt || new Date();
+                    await message.save();
+
+                    io.to(socket.id).emit('messageDeleted', {
+                        messageId,
+                        scope: 'me'
+                    });
+                    return;
+                }
+
+                // everyone
+                message.deletedForEveryone = true;
+                message.deletedAt = message.deletedAt || new Date();
+                await message.save();
+
+                const payload = {
+                    messageId,
+                    scope: 'everyone'
+                };
+
+                const senderSockets = onlineUsers.get(message.sender.toString());
+                if (senderSockets) {
+                    for (const sid of senderSockets) io.to(sid).emit('messageDeleted', payload);
+                }
+
+                const receiverSockets = message.receiver
+                    ? onlineUsers.get(message.receiver.toString())
+                    : null;
+                if (receiverSockets) {
+                    for (const sid of receiverSockets) io.to(sid).emit('messageDeleted', payload);
+                }
+            } catch (err) {
+                console.error('DELETE MESSAGE ERROR:', err);
+            }
+        });
+
+        // =========================
         // ADD REACTION
         // =========================
         socket.on('addReaction', async ({ messageId, receiver, emoji }) => {
