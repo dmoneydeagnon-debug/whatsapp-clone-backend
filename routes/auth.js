@@ -138,11 +138,36 @@ router.post('/google', async (req, res) => {
   }
 });
 
+// Search users for sidebar (name/email/phone/mobile)
+router.get('/users/search', auth, async (req, res) => {
+  try {
+    const q = (req.query.q || '').trim();
+    if (!q) return res.json([]);
+
+    const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+
+    const users = await User.find({
+      _id: { $ne: req.user.id },
+      $or: [
+        { name: regex },
+        { email: regex },
+        { phone: regex }
+      ]
+    }).select('name email phone avatar isOnline lastSeen');
+
+    res.json(users);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ msg: 'Server error' });
+  }
+});
+
 // Get all users (for sidebar)
 router.get('/users', auth, async (req, res) => {
   try {
     const users = await User.find({ _id: { $ne: req.user.id } })
       .select('name email avatar isOnline lastSeen');
+
 
     const usersWithLastMessage = await Promise.all(
       users.map(async (user) => {

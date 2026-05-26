@@ -12,7 +12,8 @@ router.get('/:userId', auth, async (req, res) => {
                 { sender: req.params.userId, receiver: req.user.id }
             ],
             // hide messages deleted only for this user
-            deletedForMe: { $ne: req.user.id }
+            // deletedForMe is an array; use $nin
+            deletedForMe: { $nin: [req.user.id] }
         }).sort({ createdAt: 1 });
 
         res.json(messages);

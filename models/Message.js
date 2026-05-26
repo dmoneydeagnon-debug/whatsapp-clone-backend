@@ -58,25 +58,25 @@ const messageSchema = new mongoose.Schema({
         }
     ]
 
-}, { timestamps: true });
-
+});
 
 // Soft-delete support
 // - deletedForMe: message is hidden only for specific users (requester side)
 // - deletedForEveryone: message is deleted for everyone (both sides show placeholder)
 messageSchema.add({
-  deletedForMe: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
-  }],
-  deletedForEveryone: {
-    type: Boolean,
-    default: false
-  },
-  deletedAt: {
-    type: Date,
-    default: null
-  }
+    deletedForMe: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    }],
+    deletedForEveryone: {
+        type: Boolean,
+        default: false
+    },
+    deletedAt: {
+        type: Date,
+        default: null
+    }
 });
 
 module.exports = mongoose.model('Message', messageSchema);
+
