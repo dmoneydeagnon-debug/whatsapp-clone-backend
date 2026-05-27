@@ -328,6 +328,93 @@ module.exports = (io) => {
         });
 
         // =========================
+        // FORWARD MESSAGE
+        // =========================
+        socket.on('forwardMessage', async ({ message, recipientIds }) => {
+            try {
+                if (!message || !Array.isArray(recipientIds) || recipientIds.length === 0) return;
+
+                const safeRecipientIds = recipientIds
+                    .map((id) => id?.toString?.())
+                    .filter(Boolean)
+                    .slice(0, 5);
+
+                if (safeRecipientIds.length === 0) return;
+
+                const original = await Message.findById(message._id);
+                if (!original) return;
+
+                const isParticipant =
+                    original.sender?.toString?.() === userId?.toString?.() ||
+                    original.receiver?.toString?.() === userId?.toString?.();
+                if (!isParticipant) return;
+
+                // Forward for 1:1 only in this app
+                const textToForward = original.text || '';
+                const mediaUrlToForward = original.mediaUrl || '';
+                const mediaTypeToForward = original.mediaType || 'text';
+
+                const createdMessages = [];
+
+                for (const rid of safeRecipientIds) {
+                    // do not forward to self
+                    if (rid === userId?.toString?.()) continue;
+
+                    // Receiver must be valid participant in 1:1 conversation? For now allow forwarding to any existing user.
+                    const receiverSockets = onlineUsers.get(rid);
+                    const isReceiverOnline = receiverSockets && receiverSockets.size > 0;
+                    const status = isReceiverOnline ? 'delivered' : 'sent';
+
+                    const fwdMsg = await Message.create({
+                        sender: userId,
+                        receiver: rid,
+                        text: textToForward,
+                        mediaUrl: mediaUrlToForward,
+                        mediaType: mediaTypeToForward,
+                        status
+                    });
+
+                    createdMessages.push({ fwdMsg, receiverId: rid });
+
+                    const payload = {
+                        _id: fwdMsg._id,
+                        sender: userId,
+                        receiver: rid,
+                        text: textToForward,
+                        mediaUrl: mediaUrlToForward,
+                        mediaType: mediaTypeToForward,
+                        createdAt: fwdMsg.createdAt,
+                        status: fwdMsg.status,
+                        isForwarded: true
+                    };
+
+                    if (isReceiverOnline) {
+                        for (const socketId of receiverSockets) {
+                            io.to(socketId).emit('receiveMessage', payload);
+                        }
+                    }
+
+                    socket.emit('receiveMessage', payload);
+
+                    // update sender status delivered when receiver is online
+                    if (isReceiverOnline) {
+                        const senderSockets = onlineUsers.get(userId);
+                        if (senderSockets) {
+                            for (const socketId of senderSockets) {
+                                io.to(socketId).emit('messageStatusUpdate', {
+                                    messageId: fwdMsg._id,
+                                    status: 'delivered'
+                                });
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error('FORWARD MESSAGE ERROR:', err);
+            }
+        });
+
+        // =========================
         // ADD REACTION
         // =========================
         socket.on('addReaction', async ({ messageId, receiver, emoji }) => {
