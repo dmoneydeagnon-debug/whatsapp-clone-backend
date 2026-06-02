@@ -47,8 +47,10 @@ app.use(express.json());
 // Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/messages', require('./routes/messages'));
+app.use('/api/groups', require('./routes/groups'));
 
 app.use('/api/upload', require('./routes/upload'));
+
 
 
 app.get('/', (req, res) => {
