@@ -16,15 +16,14 @@ const server = http.createServer(app);
 
 // CORS (important for Vercel frontend)
 const allowedOrigins = [
-    "http://localhost:5173",
     "https://whatsapp-clone-frontend-one.vercel.app"
 ];
 
 const corsOptions = {
     origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin)) {
-            return callback(null, true);
-        }
+        // allow requests from any localhost port during development
+        if (!origin || origin.startsWith('http://localhost')) return callback(null, true);
+        if (allowedOrigins.includes(origin)) return callback(null, true);
         callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
@@ -87,13 +86,38 @@ const io = new Server(server, {
 // Initialize socket logic
 require('./socket')(io);
 
-const PORT = process.env.PORT || 5001
+const PORT = parseInt(process.env.PORT, 10) || 5001;
+const fallbackPort = PORT + 1;
+const bindPorts = [PORT, fallbackPort];
+let attemptIndex = 0;
+
+const startServer = () => {
+    const port = bindPorts[attemptIndex];
+    server.listen(port, () => {
+        console.log(`Server running on port ${port}`);
+    });
+};
+
+server.on('error', (error) => {
+    if (error.code === 'EADDRINUSE') {
+        if (attemptIndex === 0) {
+            console.error(`Port ${bindPorts[0]} is already in use. Trying port ${bindPorts[1]}...`);
+            attemptIndex = 1;
+            server.listen(bindPorts[1]);
+            return;
+        }
+
+        console.error(`Port ${bindPorts[1]} is already in use. Cannot start server.`);
+        process.exit(1);
+    }
+
+    console.error('Server error:', error);
+    process.exit(1);
+});
 
 // Start server AFTER DB connects
 connectDB().then(() => {
-    server.listen(PORT, () => {
-        console.log(`Server running on port ${PORT}`);
-    });
-}).catch(err => {
+    startServer();
+}).catch((err) => {
     console.error('DB error:', err);
 });
